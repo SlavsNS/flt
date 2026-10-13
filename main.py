@@ -4,17 +4,37 @@ import json
 import os
 import time
 import subprocess
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
 BOT_TOKEN = "8834956870:AAGzNwBXB8zJOQZsFIp9vJpoO-GU77lRaq8"
 CHAT_ID = "975408010"
 STATE_FILE = "seen_pechersk_flats.json"
 
+# --- LIGHTWEIGHT HTTP HEALTHCHECK SERVER FOR RENDER WEB SERVICE ---
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Pechersk Rent Radar is running healthy!")
+
+    def log_message(self, format, *args):
+        # Mute http access logs to keep console clean
+        pass
+
+def start_healthcheck_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"Healthcheck HTTP server started on port {port}")
+    server.serve_forever()
+
 def fix_encoding(text):
     if not isinstance(text, str):
         return text
     try:
-        # OLX prerendered JSON often double-encodes UTF-8 into latin1
         return text.encode('latin1').decode('utf-8')
     except Exception:
         return text
@@ -129,11 +149,9 @@ def analyze_ad(ad):
     
     full_text = (title + " " + desc).lower()
     
-    # Babushka detector
     bad_keywords = ['радянськ', 'сталінськ', 'жилий стан', 'радянський', 'бабушк', 'ковролин', 'без ремонту', 'під ремонт']
     is_babushka = any(k in full_text for k in bad_keywords) or repair == 'Житловий стан'
     
-    # Modern / Quality tags
     tags = []
     if 'генератор' in full_text:
         tags.append('🔋 Генератор')
@@ -340,4 +358,8 @@ def run_continuous_monitor():
             time.sleep(5)
 
 if __name__ == '__main__':
+    # Start background thread for HTTP healthcheck so Render Web Service marks deployment as Live
+    http_thread = threading.Thread(target=start_healthcheck_server, daemon=True)
+    http_thread.start()
+    
     run_continuous_monitor()
