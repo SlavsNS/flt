@@ -10,6 +10,15 @@ BOT_TOKEN = "8834956870:AAGzNwBXB8zJOQZsFIp9vJpoO-GU77lRaq8"
 CHAT_ID = "975408010"
 STATE_FILE = "seen_pechersk_flats.json"
 
+def fix_encoding(text):
+    if not isinstance(text, str):
+        return text
+    try:
+        # OLX prerendered JSON often double-encodes UTF-8 into latin1
+        return text.encode('latin1').decode('utf-8')
+    except Exception:
+        return text
+
 # --- TELEGRAM API HELPERS ---
 
 def tg_api(method, data=None):
@@ -51,7 +60,7 @@ def get_main_keyboard():
 def fetch_pechersk_ads(max_price=15000):
     url = f'https://www.olx.ua/uk/nedvizhimost/kvartiry/dolgosrochnaya-arenda-kvartir/kiev/?search%5Bdistrict_id%5D=11&search%5Bfilter_float_price%3Ato%5D={max_price}&search%5Border%5D=created_at%3Adesc'
     html = ""
-    # Try curl first (works perfectly on Render / Linux / Windows)
+    # Try curl first
     try:
         res = subprocess.run([
             'curl', '-s', '-L', '-A',
@@ -71,7 +80,6 @@ def fetch_pechersk_ads(max_price=15000):
             pass
 
     if not html:
-        # Fallback to urllib
         req = urllib.request.Request(
             url,
             headers={
@@ -105,15 +113,15 @@ def fetch_pechersk_ads(max_price=15000):
         return []
 
 def analyze_ad(ad):
-    title = ad.get('title', '')
-    desc = ad.get('description', '')
+    title = fix_encoding(ad.get('title', ''))
+    desc = fix_encoding(ad.get('description', ''))
     price_val = ad.get('price', {}).get('regularPrice', {}).get('value', 0)
-    price_str = ad.get('price', {}).get('displayValue', '')
+    price_str = fix_encoding(ad.get('price', {}).get('displayValue', ''))
     url = ad.get('url', '')
-    user_name = ad.get('user', {}).get('name', 'Власник')
+    user_name = fix_encoding(ad.get('user', {}).get('name', 'Власник'))
     user_created = ad.get('user', {}).get('created', '')
     
-    params = {p.get('name'): p.get('value') for p in ad.get('params', [])}
+    params = {fix_encoding(p.get('name')): fix_encoding(p.get('value')) for p in ad.get('params', [])}
     repair = params.get('Ремонт', 'Не вказано')
     floor = params.get('Поверх', '?')
     total_floors = params.get('Поверховість', '?')
